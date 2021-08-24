@@ -1,0 +1,4 @@
+name = "QuadProg"
+uuid = "ad19a827-0d7d-45cc-9c77-733d59e80c38"
+authors = ["Kevin Tracy <ktracy@stanford.edu>"]
+version = "0.1.0"
