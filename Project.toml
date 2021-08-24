@@ -2,3 +2,12 @@ name = "QuadProg"
 uuid = "ad19a827-0d7d-45cc-9c77-733d59e80c38"
 authors = ["Kevin Tracy <ktracy@stanford.edu>"]
 version = "0.1.0"
+
+[deps]
+Convex = "f65535da-76fb-5f13-bab9-19810c17039a"
+ECOS = "e2685f51-7e38-5353-a97d-a921fd2c8199"
+Infiltrator = "5903a43b-9cc3-4c30-8d17-598619ec4e9b"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+QDLDL = "bfc457fd-c171-5ab7-bd9e-d5dbfc242d63"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+SuiteSparse = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
