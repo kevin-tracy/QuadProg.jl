@@ -130,6 +130,12 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
+[[MATLAB]]
+deps = ["Libdl", "SparseArrays"]
+git-tree-sha1 = "9edb97bacd74c960b27d6fd230e139689fdc4a7b"
+uuid = "10e44e05-a98a-55b3-a45b-ba969058deb6"
+version = "0.8.2"
+
 [[Markdown]]
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
@@ -171,6 +177,18 @@ version = "0.2.20"
 git-tree-sha1 = "ed3157f48a05543cce9b241e1f2815f7e843d96e"
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.2.0"
+
+[[OSQP]]
+deps = ["BinaryProvider", "Libdl", "LinearAlgebra", "MathOptInterface", "MathProgBase", "OSQP_jll", "SparseArrays"]
+git-tree-sha1 = "1231412a185b8c160111bdfa0c186108e2b5c049"
+uuid = "ab2f91bb-94b4-55e3-9ba0-7f65df51de79"
+version = "0.6.1"
+
+[[OSQP_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "ae1ca9707f7e8eb4805e83bad42af90fde780663"
+uuid = "9c4f68bf-6205-5545-a508-2878b064d984"
+version = "0.6.2+0"
 
 [[OrderedCollections]]
 git-tree-sha1 = "85f8e6578bf1f9ee0d11e7bb1b1456435479d47c"

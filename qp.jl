@@ -119,7 +119,7 @@ end
 function rhs_kkt_a!(qp::QP)
     idx = qp.idx
     qp.rhs_a[idx.x] = -(qp.A'*qp.y + qp.G'*qp.z + qp.Q*qp.x + qp.q)
-    qp.rhs_a[idx.s] = -(qp.s .* qp.z)
+    qp.rhs_a[idx.s] = -(qp.z)
     qp.rhs_a[idx.z] = -(qp.G*qp.x + qp.s - qp.h)
     qp.rhs_a[idx.y] = -(qp.A*qp.x - qp.b)
     return nothing
@@ -154,8 +154,7 @@ end
 function rhs_kkt_c!(qp::QP, σ, μ)
     idx = qp.idx
     qp.rhs_c .= 0
-    qp.rhs_c[idx.s] = σ*μ .- (qp.Δ.s_a .* qp.Δ.z_a)
-
+    qp.rhs_c[idx.s] = (σ*μ .- (qp.Δ.s_a .* qp.Δ.z_a)) ./ qp.s
     return nothing
 end
 function combine_deltas!(qp::QP)
@@ -176,26 +175,29 @@ end
 
 function solveqp!(qp::QP)
 
+    @printf "iter     objv        gap       |Ax-b|    |Gx+s-h|    step\n"
+    @printf "---------------------------------------------------------\n"
+
     initialize!(qp)
 
     initialize_kkt!(qp)
 
-    for i = 1:25
+    for i = 1:7
 
         # update linear system for solves
         update_kkt!(qp)
+        kkt_factor = qdldl(qp.KKT)
 
         # affine step
         rhs_kkt_a!(qp)
-        @show i
-        @show norm(qp.rhs_a)
-        qp.p_a .= qp.KKT\qp.rhs_a
+
+        qp.p_a .= kkt_factor\qp.rhs_a
         index_sol_a!(qp)
 
         # centering and correcting step
         σ, μ = centering_params(qp)
         rhs_kkt_c!(qp, σ, μ)
-        qp.p_c .= qp.KKT\qp.rhs_c
+        qp.p_c .= kkt_factor\qp.rhs_c
         index_sol_c!(qp)
 
         # combine deltas
@@ -206,15 +208,29 @@ function solveqp!(qp::QP)
 
         update_vars!(qp,α)
 
-
+        logging(qp::QP,i,α)
     end
-
 
     return nothing
 end
+
+function logging(qp::QP,iter,α)
+
+    J = 0.5*qp.x'*qp.Q*qp.x + dot(qp.q,qp.x)
+    gap = dot(qp.s,qp.z)
+    eq_res = norm(qp.A*qp.x - qp.b)
+    ineq_res = norm(qp.G*qp.x + qp.s - qp.h)
+
+
+    @printf("%3d   %10.3e  %9.2e  %9.2e  %9.2e  % 6.4f\n",
+          iter, J, gap, eq_res,
+          ineq_res, α)
+
+    return nothing
+end
+
 function initialize!(qp::QP)
     idx = qp.idx
-
     Ni = idx.nx + idx.nz + idx.ny
     idx_y = idx.y .- idx.ns
 
@@ -265,31 +281,46 @@ end
 
 function update_kkt!(qp::QP)
     idx = qp.idx
-    qp.KKT[idx.s, idx.s] = Diagonal(qp.z)
-    qp.KKT[idx.s, idx.z] = Diagonal(qp.s)
+    qp.KKT[idx.s, idx.s] = Diagonal(qp.z ./ qp.s)
+    qp.KKT[idx.s, idx.z] = I(idx.ns)
     return nothing
 end
 
 
 
 let
-    n = 60
-    m_eq = 6
-    m_ineq = 3
+    # n = 60
+    # m_eq = 6
+    # m_ineq = 3
+    #
+    # Q = randn(n,n);Q = Q'*Q
+    # Q = I(n)
+    # Q = sparse(Q)
+    # q = randn(n)
+    #
+    # A = sprand(m_eq,n,0.25)
+    # b = randn(m_eq)
+    #
+    # G = sprand(m_ineq,n,0.25)
+    # h = randn(m_ineq)
 
+    n = 10
     Q = randn(n,n);Q = Q'*Q
     Q = sparse(Q)
-    q = randn(n)
-
-    A = sprand(m_eq,n,0.25)
-    b = randn(m_eq)
-
-    G = sprand(m_ineq,n,0.25)
-    h = randn(m_ineq)
+    q = zeros(n)
+    A = spzeros(0,n)
+    b = []
+    G = sparse([I(n);-I(n)])
+    h = [ones(n);zeros(n)]
 
     qp = QP(Q,q,A,b,G,h)
 
-    solveqp!(qp::QP)
+    # @btime solveqp!($qp::QP)
+
+    m = OSQP.Model()
+    OSQP.setup!(m; P = Q, q=q, A=sparse(I(10)), l=zeros(n), u=ones(n))
+
+    @btime results = OSQP.solve!($m)
 
     # x = Variable(n)
     # problem = minimize(0.5*quadform(x,Matrix(Q)) + dot(q,x),[A*x == b, G*x <= h])
