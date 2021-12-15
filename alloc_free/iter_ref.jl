@@ -2,7 +2,13 @@ using QDLDL, SparseArrays, SuiteSparse
 using LinearAlgebra
 using Infiltrator
 
-
+struct IterRef
+    r::Vector{Float64}
+    Δx::Vector{Float64}
+    function IterRef(N)
+        new(zeros(N),zeros(N))
+    end
+end
 function iterative_ref(F::QDLDL.QDLDLFactorisation{Float64, Int64},
                        A::SparseMatrixCSC{Float64, Int64},
                        x::Vector{Float64},

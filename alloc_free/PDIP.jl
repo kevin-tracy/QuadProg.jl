@@ -3,14 +3,15 @@ using SuiteSparse
 # using Infiltrator
 # using QDLDL, ECOS, Convex
 using QDLDL
-using Convex, Mosek, MosekTools, Printf
+# using Convex, Mosek, MosekTools, Printf
+using OSQP
 # using Convex, ECOS
 using Printf
 using Infiltrator
 using Test
 
 include(joinpath(@__DIR__,"create_MPC.jl"))
-
+include(joinpath(@__DIR__,"iter_ref.jl"))
 struct x_cache
     c1::Vector{Float64}
     c2::Vector{Float64}
@@ -55,13 +56,6 @@ struct IDX
     s::UnitRange{Int64}
     z::UnitRange{Int64}
     y::UnitRange{Int64}
-end
-struct IterRef
-    r::Vector{Float64}
-    Δx::Vector{Float64}
-    function IterRef(N)
-        new(zeros(N),zeros(N))
-    end
 end
 struct INIT
     LS::SparseMatrixCSC{Float64, Int64}
@@ -291,13 +285,13 @@ end
 
 function solveqp!(qp::QP)
 
-    @printf "iter     objv        gap       |Ax-b|    |Gx+s-h|    step\n"
-    @printf "---------------------------------------------------------\n"
+    # @printf "iter     objv        gap       |Ax-b|    |Gx+s-h|    step\n"
+    # @printf "---------------------------------------------------------\n"
 
     # @btime initialize!($qp)
     initialize!(qp)
     # @btime update_kkt!($qp)
-    for i = 1:50
+    for i = 1:7
 
         # update all things KKT
         update_kkt!(qp)
@@ -324,9 +318,9 @@ function solveqp!(qp::QP)
 
         update_vars!(qp,α)
 
-        if logging(qp::QP,i,α)
-            break
-        end
+        # if logging(qp::QP,i,α)
+        #     break
+        # end
 
     end
 
@@ -517,19 +511,30 @@ end
 
 function quadprog(Q,q,A,b,G,h)
     qp = QP(Q,q,A,b,G,h)
-    # @btime solveqp!($qp::QP)
-    solveqp!(qp)
+    @btime solveqp!($qp::QP)
+    # solveqp!(qp)
     return qp.x
 end
 
 function tt()
-    N = 20
+    N = 5
     Q,q,A,b,G,h = create_MPC(N)
     x1 = quadprog(Q,q,A,b,G,h)
-    x = Variable(length(q))
-    problem = minimize(0.5*quadform(x,Matrix(Q)) + dot(q,x),[A*x == b, G*x <= h])
-    Convex.solve!(problem,Mosek.Optimizer)
-    @test norm(x.value - x1) <1e-3
+
+    A = [A;G]
+    l = [b;-Inf*ones(length(h))]
+    u = [b;h]
+
+    m = OSQP.Model()
+    OSQP.setup!(m; P = Q, q = q, A = A, l = l, u = u, eps_abs = 1e-8, eps_rel = 1e-8)
+
+
+    # @btime results = OSQP.solve!($m)
+    results = OSQP.solve!(m)
+    # x = Variable(length(q))
+    # problem = minimize(0.5*quadform(x,Matrix(Q)) + dot(q,x),[A*x == b, G*x <= h])
+    # Convex.solve!(problem,Mosek.Optimizer)
+    # @test norm(x.value - x1) <1e-3
     #
     # # @show length(x1)
     # X = reshape(x1[1:end-6],9,N-1)
