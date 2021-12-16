@@ -9,6 +9,7 @@ using OSQP
 using Printf
 using Infiltrator
 using Test
+using BenchmarkTools
 
 include(joinpath(@__DIR__,"create_MPC.jl"))
 include(joinpath(@__DIR__,"iter_ref.jl"))
@@ -285,13 +286,13 @@ end
 
 function solveqp!(qp::QP)
 
-    # @printf "iter     objv        gap       |Ax-b|    |Gx+s-h|    step\n"
-    # @printf "---------------------------------------------------------\n"
+    @printf "iter     objv        gap       |Ax-b|    |Gx+s-h|    step\n"
+    @printf "---------------------------------------------------------\n"
 
     # @btime initialize!($qp)
     initialize!(qp)
     # @btime update_kkt!($qp)
-    for i = 1:7
+    for i = 1:50
 
         # update all things KKT
         update_kkt!(qp)
@@ -318,73 +319,59 @@ function solveqp!(qp::QP)
 
         update_vars!(qp,α)
 
-        # if logging(qp::QP,i,α)
-        #     break
-        # end
+        if logging(qp::QP,i,α)
+            break
+        end
 
     end
-
-    # # initialize_kkt!(qp)
-    #
-    # for i = 1:50
-    #
-    #     # update linear system for solves
-    #     update_kkt!(qp)
-    #     # kkt_factor = qdldl(qp.KKT +
-    #                       # 1e-10*Diagonal([ones(qp.idx.nx + qp.idx.ns);-ones(qp.idx.nz + qp.idx.ny)]))
-    #
-    #     # mat"figure
-    #     # hold on
-    #     # spy($qp.KKT)
-    #     # hold off"
-    #     # @show size(qp.KKT)
-    #     # @show rank(qp.KKT)
-    #     # @show cond(Array(qp.KKT),2)
-    #     # error()
-    #     # @infiltrate
-    #     kkt_factor = lu(qp.KKT)
-    #
-    #     # affine step
-    #     rhs_kkt_a!(qp)
-    #
-    #
-    #     qp.p_a .= kkt_factor\qp.rhs_a
-    #     # qp.p_a .= iterative_ref(kkt_factor,qp.KKT,qp.rhs_a)
-    #     index_sol_a!(qp)
-    #
-    #
-    #     # centering and correcting step
-    #     σ, μ = centering_params(qp)
-    #
-    #     rhs_kkt_c!(qp, σ, μ)
-    #     qp.p_c .= kkt_factor\qp.rhs_c
-    #     # qp.p_c .= iterative_ref(kkt_factor,qp.KKT,qp.rhs_c)
-    #     index_sol_c!(qp)
-    #
-    #     # combine deltas
-    #     combine_deltas!(qp)
-    #
-    #     # last linesearch
-    #     α = min(1,0.99*min(linesearch(qp.s,qp.Δ.s),linesearch(qp.z,qp.Δ.z)))
-    #
-    #     update_vars!(qp,α)
-    #
-    #     if logging(qp::QP,i,α)
-    #         break
-    #     end
-    # end
-    # if dot(qp.s,qp.z) > 1e-8
-    #     error("PDIP FAILED")
-    # end
     return nothing
 end
 
+
+# # qp.rhs_a[idx.x] = -(qp.A'*qp.y + qp.G'*qp.z + qp.Q*qp.x + qp.q)
+# mul!(c.x.c1,qp.A',qp.y)
+# mul!(c.x.c2,qp.G',qp.z)
+# mul!(c.x.c3,qp.Q,qp.x)
+# @. qp.rhs_a[idx.x] = -c.x.c1 - c.x.c2 - c.x.c3 - qp.q
+#
+# # qp.rhs_a[idx.s] = -(qp.z)
+# @. qp.rhs_a[idx.s] = -qp.z
+#
+# # qp.rhs_a[idx.z] = -(qp.G*qp.x + qp.s - qp.h)
+# mul!(c.z.c1,qp.G,qp.x)
+# @. qp.rhs_a[idx.z] = -c.z.c1 - qp.s + qp.h
+#
+# # qp.rhs_a[idx.y] = -(qp.A*qp.x - qp.b)
+# mul!(c.y.c1,qp.A,qp.x)
+# @. qp.rhs_a[idx.y] = -c.y.c1 + qp.b
+
 function logging(qp::QP,iter,α)
 
-    J = 0.5*qp.x'*qp.Q*qp.x + dot(qp.q,qp.x)
-    gap = dot(qp.s,qp.z)
-    eq_res = norm(qp.A*qp.x - qp.b)
-    ineq_res = norm(qp.G*qp.x + qp.s - qp.h)
+    c = qp.cache
+
+    # J = 0.5*qp.x'*qp.Q*qp.x + dot(qp.q,qp.x)
+    c.x.c1 .= 0
+    mul!(c.x.c1,qp.Q,qp.x)
+    J = 0.5*dot(qp.x,c.x.c1) + dot(qp.q,qp.x)
+
+    # duality gap
+    gap = dot(qp.s,qp.z)/qp.idx.ns
+
+    # |Ax - b|
+    c.y.c1 .= 0
+    mul!(c.y.c1,qp.A,qp.x)
+    @. c.y.c1 -= qp.b
+    eq_res = norm(c.y.c1)
+
+    # |Gx + s - h|
+    c.z.c1 .= 0
+    mul!(c.z.c1,qp.G,qp.x)
+    @. c.z.c1 += qp.s - qp.h
+    ineq_res = norm(c.z.c1)
+
+
+    # eq_res = norm(qp.A*qp.x - qp.b)
+    # ineq_res = norm(qp.G*qp.x + qp.s - qp.h)
 
 
     @printf("%3d   %10.3e  %9.2e  %9.2e  %9.2e  % 6.4f\n",
@@ -446,23 +433,8 @@ function initialize!(qp::QP)
     return nothing
 end
 
-# function initialize_kkt!(qp::QP)
-#     idx = qp.idx
-#
-#     qp.KKT[idx.x, idx.x] = qp.Q
-#     qp.KKT[idx.x, idx.z] = qp.G'
-#     qp.KKT[idx.x, idx.y] = qp.A'
-#     qp.KKT[idx.s, idx.s] = Diagonal(qp.z)
-#     qp.KKT[idx.s, idx.z] = Diagonal(qp.s)
-#     qp.KKT[idx.z, idx.x] = qp.G
-#     qp.KKT[idx.z, idx.s] = I(idx.nz)
-#     qp.KKT[idx.y, idx.x] = qp.A
-#
-#     return nothing
-# end
-function initialize_kkt!(KKT,idx::IDX,Q,G,A)
-    # idx = qp.idx
 
+function initialize_kkt!(KKT,idx::IDX,Q,G,A)
     KKT[idx.x, idx.x] = Q
     KKT[idx.x, idx.z] = G'
     KKT[idx.x, idx.y] = A'
@@ -471,7 +443,6 @@ function initialize_kkt!(KKT,idx::IDX,Q,G,A)
     KKT[idx.z, idx.x] = G
     KKT[idx.z, idx.s] = I(idx.nz)
     KKT[idx.y, idx.x] = A
-
     return nothing
 end
 function regularize!(A,np,nd,ρ)
@@ -511,8 +482,8 @@ end
 
 function quadprog(Q,q,A,b,G,h)
     qp = QP(Q,q,A,b,G,h)
-    @btime solveqp!($qp::QP)
-    # solveqp!(qp)
+    # @btime solveqp!($qp::QP)
+    solveqp!(qp)
     return qp.x
 end
 
@@ -520,17 +491,17 @@ function tt()
     N = 5
     Q,q,A,b,G,h = create_MPC(N)
     x1 = quadprog(Q,q,A,b,G,h)
-
-    A = [A;G]
-    l = [b;-Inf*ones(length(h))]
-    u = [b;h]
-
-    m = OSQP.Model()
-    OSQP.setup!(m; P = Q, q = q, A = A, l = l, u = u, eps_abs = 1e-8, eps_rel = 1e-8)
-
-
-    # @btime results = OSQP.solve!($m)
-    results = OSQP.solve!(m)
+    #
+    # A = [A;G]
+    # l = [b;-Inf*ones(length(h))]
+    # u = [b;h]
+    #
+    # m = OSQP.Model()
+    # OSQP.setup!(m; P = Q, q = q, A = A, l = l, u = u, eps_abs = 1e-8, eps_rel = 1e-8)
+    #
+    #
+    # # @btime results = OSQP.solve!($m)
+    # results = OSQP.solve!(m)
     # x = Variable(length(q))
     # problem = minimize(0.5*quadform(x,Matrix(Q)) + dot(q,x),[A*x == b, G*x <= h])
     # Convex.solve!(problem,Mosek.Optimizer)
