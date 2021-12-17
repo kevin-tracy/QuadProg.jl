@@ -17,6 +17,6 @@ include("mehrotra.jl")
 include("utils.jl")
 include("solver.jl")
 
-export solveqp!, quadprog
+export QP, solveqp!, quadprog
 
 end # module
