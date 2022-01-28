@@ -1,3 +1,4 @@
+using SparseArrays
 function create_MPC(N)
     nx = 6
     nu = 3
